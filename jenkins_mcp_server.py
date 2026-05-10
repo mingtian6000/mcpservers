@@ -71,9 +71,27 @@ class JenkinsClient:
             log.warning("Could not connect to Jenkins at %s: %s", self.url, exc)
 
     def trigger_build(self, jobname: str, params: dict | None = None) -> dict:
-        """Trigger a Jenkins build (with optional parameters)."""
-        queue_id = self._server.build_job(jobname, parameters=params or {})
-        return {"queue_id": queue_id, "job": jobname, "parameters": params or {}}
+        """Trigger a Jenkins build (with optional parameters).
+
+        All parameter values are normalized to strings before sending to
+        Jenkins, because:
+        - Boolean values must be lowercase ``"true"`` / ``"false"``
+        - ``None`` values become empty string ``""``
+        - Integer / float values are stringified
+        """
+        normalized: dict[str, str] = {}
+        if params:
+            for k, v in params.items():
+                if v is None:
+                    normalized[k] = ""
+                elif isinstance(v, bool):
+                    normalized[k] = "true" if v else "false"
+                elif isinstance(v, (int, float)):
+                    normalized[k] = str(v)
+                else:
+                    normalized[k] = str(v)
+        queue_id = self._server.build_job(jobname, parameters=normalized)
+        return {"queue_id": queue_id, "job": jobname, "parameters": normalized}
 
     def stop_build(self, jobname: str, build_number: int) -> dict:
         """Stop / abort a running build."""
